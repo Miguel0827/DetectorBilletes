@@ -1,0 +1,1418 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#1a1a1a">
+    <title>Detector Billetes Pro</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+            background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+            color: #fff;
+            overflow-x: hidden;
+            min-height: 100vh;
+            margin: 0;
+            padding: 0;
+        }
+
+        .main-container {
+            position: relative;
+            width: 100%;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 10px 0;
+        }
+
+        .camera-wrapper {
+            position: relative;
+            width: 800px;
+            height: 600px;
+            max-width: 95vw;
+            max-height: 90vh;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 8px 32px rgba(0, 255, 136, 0.3);
+            background: #000;
+        }
+
+        .detection-overlay {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(to top, rgba(0, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.8) 70%, transparent 100%);
+            padding: 15px;
+            z-index: 10;
+            transition: all 0.3s;
+        }
+
+        .detection-value {
+            text-align: center;
+            margin-bottom: 10px;
+        }
+
+        .detection-value-amount {
+            font-size: 32px;
+            font-weight: bold;
+            color: #00ff88;
+            text-shadow: 0 0 10px rgba(0, 255, 136, 0.5);
+            margin-bottom: 5px;
+        }
+
+        .detection-value-label {
+            font-size: 11px;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .detection-items {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            justify-content: center;
+            margin-bottom: 12px;
+            max-height: 60px;
+            overflow-y: auto;
+        }
+
+        .detection-badge {
+            background: rgba(0, 255, 136, 0.2);
+            border: 1px solid rgba(0, 255, 136, 0.4);
+            padding: 4px 10px;
+            border-radius: 15px;
+            font-size: 12px;
+            color: #00ff88;
+            white-space: nowrap;
+        }
+
+        .detection-actions {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+
+        .btn-overlay {
+            padding: 10px;
+            border: none;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-transform: uppercase;
+        }
+
+        .btn-overlay-save {
+            background: linear-gradient(135deg, #00ff88, #00cc66);
+            color: #000;
+        }
+
+        .btn-overlay-clear {
+            background: rgba(255, 170, 0, 0.3);
+            border: 1px solid #ffaa00;
+            color: #ffaa00;
+        }
+
+        .btn-overlay:active {
+            transform: scale(0.95);
+        }
+
+        .btn-overlay:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+
+        .detection-empty {
+            text-align: center;
+            color: #666;
+            font-size: 12px;
+            padding: 5px;
+        }
+
+        #video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        #canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+
+        #capturedImage {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: none;
+            z-index: 5;
+        }
+
+        .btn-capture {
+            position: absolute;
+            bottom: 85px;
+            right: 15px;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #00ccff, #0088ff);
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            box-shadow: 0 4px 20px rgba(0, 204, 255, 0.6);
+            cursor: pointer;
+            z-index: 25;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            transition: all 0.3s;
+        }
+
+        .btn-capture:hover {
+            transform: scale(1.1);
+            box-shadow: 0 6px 30px rgba(0, 204, 255, 0.8);
+        }
+
+        .btn-capture:active {
+            transform: scale(0.95);
+        }
+
+        .btn-capture:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-capture.processing {
+            background: linear-gradient(135deg, #ffaa00, #ff6600);
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+
+        .mode-indicator {
+            position: absolute;
+            top: 15px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 204, 255, 0.2);
+            border: 1px solid rgba(0, 204, 255, 0.5);
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 11px;
+            color: #00ccff;
+            z-index: 25;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            display: none;
+            pointer-events: none;
+        }
+
+        .btn-menu-left {
+            position: fixed;
+            left: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: linear-gradient(135deg, #00ccff, #0088ff);
+            border: none;
+            color: #fff;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            font-size: 24px;
+            cursor: pointer;
+            box-shadow: 0 4px 20px rgba(0, 204, 255, 0.4);
+            transition: all 0.3s;
+            z-index: 100;
+        }
+
+        .btn-menu-left:hover {
+            transform: translateY(-50%) scale(1.1);
+        }
+
+        .btn-menu-left:active {
+            transform: translateY(-50%) scale(0.95);
+        }
+
+        .btn-menu-right {
+            position: fixed;
+            right: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: linear-gradient(135deg, #00ff88, #00cc66);
+            border: none;
+            color: #000;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            font-size: 24px;
+            cursor: pointer;
+            box-shadow: 0 4px 20px rgba(0, 255, 136, 0.4);
+            transition: all 0.3s;
+            z-index: 100;
+        }
+
+        .btn-menu-right:hover {
+            transform: translateY(-50%) scale(1.1);
+        }
+
+        .btn-menu-right:active {
+            transform: translateY(-50%) scale(0.95);
+        }
+
+        .panel-left {
+            position: fixed;
+            left: -350px;
+            top: 0;
+            width: 350px;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.95);
+            backdrop-filter: blur(10px);
+            transition: left 0.3s ease;
+            z-index: 200;
+            overflow-y: auto;
+            padding: 20px;
+            box-shadow: 5px 0 20px rgba(0, 0, 0, 0.5);
+        }
+
+        .panel-left.open {
+            left: 0;
+        }
+
+        .panel-right {
+            position: fixed;
+            right: -400px;
+            top: 0;
+            width: 400px;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.95);
+            backdrop-filter: blur(10px);
+            transition: right 0.3s ease;
+            z-index: 200;
+            overflow-y: auto;
+            padding: 20px;
+            box-shadow: -5px 0 20px rgba(0, 0, 0, 0.5);
+        }
+
+        .panel-right.open {
+            right: 0;
+        }
+
+        .panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .panel-header h2 {
+            font-size: 24px;
+            background: linear-gradient(45deg, #00ff88, #00ccff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .btn-close {
+            background: rgba(255, 68, 68, 0.2);
+            border: 1px solid #ff4444;
+            color: #ff4444;
+            width: 35px;
+            height: 35px;
+            border-radius: 50%;
+            font-size: 20px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-close:hover {
+            background: rgba(255, 68, 68, 0.4);
+        }
+
+        .control-button {
+            width: 100%;
+            padding: 15px;
+            margin-bottom: 12px;
+            border: none;
+            border-radius: 10px;
+            font-size: 15px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-transform: uppercase;
+        }
+
+        .btn-camera {
+            background: linear-gradient(135deg, #00ccff, #0088ff);
+            color: #fff;
+        }
+
+        .btn-image {
+            background: linear-gradient(135deg, #ff9500, #ff5e00);
+            color: #fff;
+        }
+
+        .btn-clear-current {
+            background: linear-gradient(135deg, #ffaa00, #ff6600);
+            color: #fff;
+        }
+
+        .control-button:active {
+            transform: scale(0.95);
+        }
+
+        .control-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .control-panel {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+
+        .control-panel h3 {
+            font-size: 14px;
+            color: #00ff88;
+            margin-bottom: 12px;
+        }
+
+        .control-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .control-row:last-child {
+            margin-bottom: 0;
+        }
+
+        .control-row label {
+            font-size: 13px;
+            color: #aaa;
+        }
+
+        .control-row input[type="range"] {
+            flex: 1;
+            margin: 0 10px;
+        }
+
+        .control-row span {
+            color: #00ff88;
+            font-weight: bold;
+            min-width: 50px;
+            text-align: right;
+            font-size: 13px;
+        }
+
+        .status-panel {
+            background: rgba(0, 204, 255, 0.1);
+            border: 1px solid rgba(0, 204, 255, 0.3);
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 15px;
+            text-align: center;
+            font-size: 13px;
+            color: #00ccff;
+        }
+
+        .historial-header {
+            background: rgba(0, 255, 136, 0.1);
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+
+        .historial-total {
+            font-size: 36px;
+            font-weight: bold;
+            color: #00ff88;
+            margin-bottom: 5px;
+        }
+
+        .historial-label {
+            font-size: 12px;
+            color: #888;
+            text-transform: uppercase;
+        }
+
+        .historial-item {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            transition: all 0.2s;
+        }
+
+        .historial-item:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .historial-item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .historial-item-valor {
+            font-size: 20px;
+            font-weight: bold;
+            color: #00ff88;
+        }
+
+        .historial-item-desglose {
+            font-size: 12px;
+            color: #ccc;
+            margin-bottom: 5px;
+        }
+
+        .historial-item-fecha {
+            font-size: 11px;
+            color: #666;
+        }
+
+        .btn-eliminar {
+            background: rgba(255, 68, 68, 0.2);
+            border: 1px solid #ff4444;
+            color: #ff4444;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-eliminar:hover {
+            background: rgba(255, 68, 68, 0.4);
+        }
+
+        .btn-limpiar-historial {
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(135deg, #ff4444, #cc0000);
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 15px;
+            text-transform: uppercase;
+        }
+
+        .btn-limpiar-historial:active {
+            transform: scale(0.95);
+        }
+
+        .empty-message {
+            text-align: center;
+            color: #666;
+            font-size: 13px;
+            padding: 30px 20px;
+        }
+
+        .overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 150;
+            display: none;
+        }
+
+        .overlay.active {
+            display: block;
+        }
+
+        @media (max-width: 768px) {
+            body {
+                overflow-y: auto;
+            }
+
+            .main-container {
+                min-height: 100vh;
+                padding: 5px 0;
+            }
+
+            .camera-wrapper {
+                max-width: 95vw;
+                max-height: 80vh;
+            }
+
+            .panel-left, .panel-right {
+                width: 90vw;
+            }
+
+            .btn-menu-left, .btn-menu-right {
+                width: 50px;
+                height: 50px;
+                font-size: 20px;
+            }
+
+            .btn-menu-left {
+                left: 10px;
+            }
+
+            .btn-menu-right {
+                right: 10px;
+            }
+
+            .btn-capture {
+                width: 55px;
+                height: 55px;
+                font-size: 24px;
+                bottom: 80px;
+            }
+
+            .status-panel {
+                font-size: 11px;
+                padding: 8px;
+            }
+
+            .mode-indicator {
+                font-size: 10px;
+                padding: 6px 12px;
+            }
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="main-container">
+        <div class="camera-wrapper">
+            <video id="video" autoplay playsinline></video>
+            <canvas id="canvas"></canvas>
+            <img id="capturedImage" alt="Captura">
+            
+            <div class="mode-indicator" id="modeIndicator">📸 MODO CAPTURA</div>
+            
+            <button class="btn-capture" id="btnCapture" onclick="capturarYDetectar()">
+                📸
+            </button>
+            
+            <div class="detection-overlay">
+                <div class="detection-value">
+                    <div class="detection-value-amount" id="detectionAmount">$0</div>
+                    <div class="detection-value-label">Detección Actual</div>
+                </div>
+                
+                <div class="detection-items" id="detectionItems">
+                    <div class="detection-empty">Sin detecciones</div>
+                </div>
+                
+                <div class="detection-actions">
+                    <button class="btn-overlay btn-overlay-save" onclick="guardarDeteccionActual()" id="btnGuardarOverlay">
+                        💾 GUARDAR
+                    </button>
+                    <button class="btn-overlay btn-overlay-clear" onclick="limpiarDeteccionActual()" id="btnLimpiarOverlay">
+                        🗑️ LIMPIAR
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <button class="btn-menu-left" onclick="togglePanelLeft()">⚙️</button>
+    <button class="btn-menu-right" onclick="togglePanelRight()">💰</button>
+
+    <div class="overlay" id="overlay" onclick="closePanels()"></div>
+
+    <div class="panel-left" id="panelLeft">
+        <div class="panel-header">
+            <h2>⚙️ Controles</h2>
+            <button class="btn-close" onclick="togglePanelLeft()">✕</button>
+        </div>
+
+        <div class="status-panel" id="status">
+            Presiona iniciar cámara
+        </div>
+
+        <button class="control-button btn-camera" id="btnStart" onclick="iniciarCamara()">
+            🎥 INICIAR CÁMARA
+        </button>
+
+        <button class="control-button btn-image" onclick="probarConImagen()">
+            🖼️ SUBIR IMAGEN
+        </button>
+
+        <button class="control-button" id="btnSwitchCamera" onclick="cambiarCamara()" style="background: linear-gradient(135deg, #9d4edd, #7b2cbf); color: #fff; display: none;">
+            🔄 CAMBIAR CÁMARA
+        </button>
+
+        <div class="control-panel">
+            <h3>🎯 Ajustes de Detección</h3>
+            <div class="control-row">
+                <label>Confianza:</label>
+                <input type="range" id="confSlider" min="10" max="90" value="35" oninput="actualizarConf(this.value)">
+                <span id="confValue">35%</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel-right" id="panelRight">
+        <div class="panel-header">
+            <h2>💰 Historial</h2>
+            <button class="btn-close" onclick="togglePanelRight()">✕</button>
+        </div>
+
+        <div class="historial-header">
+            <div class="historial-total" id="totalHistorial">$0</div>
+            <div class="historial-label">Total Acumulado</div>
+        </div>
+
+        <div id="historialList">
+            <div class="empty-message">No hay registros guardados</div>
+        </div>
+
+        <button class="btn-limpiar-historial" onclick="limpiarHistorial()">
+            🗑️ LIMPIAR TODO EL HISTORIAL
+        </button>
+    </div>
+
+    <input type="file" id="imageInput" accept="image/*" onchange="procesarImagen(this)">
+
+    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script>
+    <script>
+        const CLASS_NAMES = ['100', '1000', '10000', '100000', '200', '2000', '20000', '50', '500', '5000', '50000'];
+        
+        const VALORES = {
+            "100": 100, "1000": 1000, "10000": 10000, "100000": 100000,
+            "200": 200, "2000": 2000, "20000": 20000,
+            "50": 50, "500": 500, "5000": 5000, "50000": 50000
+        };
+
+        let CONF_THRESHOLD = 0.35;
+        const IOU_THRESHOLD = 0.4;
+        let INPUT_SIZE = 640;
+
+        let video, canvas, ctx, capturedImage;
+        let stream = null;
+        let deteccionesActuales = {};
+        let historial = [];
+        let session = null;
+        let camarasDisponibles = [];
+        let camaraActualIndex = 0;
+        let camaraActiva = false;
+        let esMobil = false;
+        let deteccionActiva = false;
+        let procesando = false;
+
+        function togglePanelLeft() {
+            const panel = document.getElementById('panelLeft');
+            const overlay = document.getElementById('overlay');
+            const panelRight = document.getElementById('panelRight');
+            
+            panel.classList.toggle('open');
+            
+            if (panel.classList.contains('open')) {
+                overlay.classList.add('active');
+                panelRight.classList.remove('open');
+            } else {
+                overlay.classList.remove('active');
+            }
+        }
+
+        function togglePanelRight() {
+            const panel = document.getElementById('panelRight');
+            const overlay = document.getElementById('overlay');
+            const panelLeft = document.getElementById('panelLeft');
+            
+            panel.classList.toggle('open');
+            
+            if (panel.classList.contains('open')) {
+                overlay.classList.add('active');
+                panelLeft.classList.remove('open');
+            } else {
+                overlay.classList.remove('active');
+            }
+        }
+
+        function closePanels() {
+            document.getElementById('panelLeft').classList.remove('open');
+            document.getElementById('panelRight').classList.remove('open');
+            document.getElementById('overlay').classList.remove('active');
+        }
+
+        function actualizarConf(value) {
+            CONF_THRESHOLD = value / 100;
+            document.getElementById('confValue').textContent = value + '%';
+        }
+
+        function cargarHistorial() {
+            const saved = localStorage.getItem('historial_billetes');
+            if (saved) {
+                historial = JSON.parse(saved);
+                actualizarHistorialUI();
+            }
+        }
+
+        function calcularTotalHistorial() {
+            return historial.reduce((sum, item) => sum + item.total, 0);
+        }
+
+        window.onload = async function() {
+            video = document.getElementById('video');
+            canvas = document.getElementById('canvas');
+            ctx = canvas.getContext('2d');
+            capturedImage = document.getElementById('capturedImage');
+            
+            cargarHistorial();
+            actualizarOverlayDeteccion();
+
+            const status = document.getElementById('status');
+            const btnSwitchCamera = document.getElementById('btnSwitchCamera');
+            const btnCapture = document.getElementById('btnCapture');
+            const modeIndicator = document.getElementById('modeIndicator');
+
+            esMobil = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+            if (esMobil) {
+                console.log('📱 Modo móvil - Detección por captura');
+                INPUT_SIZE = 640;
+                CONF_THRESHOLD = 0.30;
+                
+                btnCapture.style.display = 'flex';
+                modeIndicator.style.display = 'block';
+                modeIndicator.textContent = '📸 MODO CAPTURA';
+
+                try {
+                    const tempStream = await navigator.mediaDevices.getUserMedia({ video: true });
+                    tempStream.getTracks().forEach(track => track.stop());
+
+                    const devices = await navigator.mediaDevices.enumerateDevices();
+                    camarasDisponibles = devices.filter(d => d.kind === 'videoinput');
+
+                    if (camarasDisponibles.length >= 1) {
+                        btnSwitchCamera.style.display = 'block';
+                    }
+                } catch (error) {
+                    console.warn('⚠️ Error detectando cámaras:', error);
+                    btnSwitchCamera.style.display = 'block';
+                }
+            } else {
+                console.log('💻 Modo PC - Detección automática continua');
+                INPUT_SIZE = 640;
+                CONF_THRESHOLD = 0.40;
+                
+                btnCapture.style.display = 'none';
+                modeIndicator.style.display = 'block';
+                modeIndicator.style.background = 'rgba(0, 255, 136, 0.2)';
+                modeIndicator.style.borderColor = 'rgba(0, 255, 136, 0.5)';
+                modeIndicator.style.color = '#00ff88';
+                modeIndicator.textContent = '🤖 DETECCIÓN AUTOMÁTICA';
+            }
+
+            try {
+                status.textContent = 'Cargando modelo...';
+                session = await ort.InferenceSession.create('models/best.onnx');
+                console.log('✅ MODELO CARGADO');
+                status.textContent = '✅ Listo - Presiona INICIAR';
+            } catch (error) {
+                console.error('❌ ERROR cargando modelo:', error);
+                status.textContent = '⚠️ Modelo no encontrado';
+            }
+        };
+
+        async function iniciarCamara() {
+            if (!session) {
+                alert('⚠️ Modelo no cargado');
+                return;
+            }
+
+            if (camaraActiva) {
+                detenerCamara();
+                return;
+            }
+
+            try {
+                document.getElementById('status').textContent = '⏳ Iniciando cámara...';
+                document.getElementById('btnStart').disabled = true;
+
+                const constraints = {
+                    video: {
+                        facingMode: { ideal: 'environment' },
+                        width: { ideal: 1920 },
+                        height: { ideal: 1080 }
+                    }
+                };
+
+                if (camarasDisponibles.length > 0) {
+                    const camara = camarasDisponibles[camaraActualIndex];
+                    constraints.video.deviceId = { exact: camara.deviceId };
+                }
+
+                stream = await navigator.mediaDevices.getUserMedia(constraints);
+                video.srcObject = stream;
+                
+                video.play().catch(err => console.warn('Error video:', err));
+                
+                video.onloadedmetadata = function() {
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    
+                    camaraActiva = true;
+                    
+                    if (esMobil) {
+                        document.getElementById('status').textContent = '✅ Cámara lista - Presiona 📸 para capturar';
+                        document.getElementById('btnCapture').style.display = 'flex';
+                    } else {
+                        document.getElementById('status').textContent = '✅ Detectando automáticamente...';
+                        deteccionActiva = true;
+                        detectarContinuo();
+                    }
+                    
+                    document.getElementById('btnStart').textContent = '🛑 DETENER CÁMARA';
+                    document.getElementById('btnStart').className = 'control-button btn-clear-current';
+                    document.getElementById('btnStart').disabled = false;
+                };
+
+            } catch (error) {
+                console.error('❌ Error cámara:', error);
+                document.getElementById('status').textContent = '❌ Error con cámara';
+                document.getElementById('btnStart').disabled = false;
+            }
+        }
+
+        async function cambiarCamara() {
+            if (camarasDisponibles.length <= 1) {
+                alert('⚠️ Solo hay una cámara disponible');
+                return;
+            }
+
+            camaraActualIndex = (camaraActualIndex + 1) % camarasDisponibles.length;
+            
+            const cameraActual = camarasDisponibles[camaraActualIndex];
+            const nombreCamara = cameraActual.label || `Cámara ${camaraActualIndex + 1}`;
+            console.log('🔄 Cambiando a:', nombreCamara);
+            
+            if (camaraActiva) {
+                detenerCamara();
+                setTimeout(() => {
+                    iniciarCamara();
+                }, 500);
+            } else {
+                document.getElementById('status').textContent = `📹 ${nombreCamara} seleccionada`;
+            }
+        }
+
+        function detenerCamara() {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                video.srcObject = null;
+                camaraActiva = false;
+                deteccionActiva = false;
+                procesando = false;
+                
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                capturedImage.style.display = 'none';
+                
+                document.getElementById('status').textContent = '⏸️ Detenido';
+                document.getElementById('btnStart').textContent = '🎥 INICIAR CÁMARA';
+                document.getElementById('btnStart').className = 'control-button btn-camera';
+                document.getElementById('btnCapture').style.display = 'none';
+            }
+        }
+
+        async function detectarContinuo() {
+            if (!deteccionActiva || !camaraActiva || !session || procesando) {
+                if (deteccionActiva && camaraActiva) {
+                    setTimeout(detectarContinuo, 800);
+                }
+                return;
+            }
+
+            procesando = true;
+
+            try {
+                const input = preprocesarImagen();
+                const feeds = {};
+                feeds[session.inputNames[0]] = input;
+                const results = await session.run(feeds);
+                
+                const output = results[session.outputNames[0]];
+                const detecciones = postprocesarResultados(output.data, canvas.width, canvas.height);
+                const deteccionesFiltradas = nonMaxSuppression(detecciones, IOU_THRESHOLD);
+                
+                deteccionesActuales = {};
+                for (const det of deteccionesFiltradas) {
+                    deteccionesActuales[det.class] = (deteccionesActuales[det.class] || 0) + 1;
+                }
+                
+                actualizarOverlayDeteccion();
+                dibujarDetecciones(deteccionesFiltradas);
+                
+            } catch (error) {
+                console.error('Error detección:', error);
+            }
+
+            procesando = false;
+            setTimeout(detectarContinuo, 800);
+        }
+
+        async function capturarYDetectar() {
+            if (!camaraActiva || !session || procesando) return;
+
+            procesando = true;
+            const btnCapture = document.getElementById('btnCapture');
+            btnCapture.classList.add('processing');
+            btnCapture.textContent = '⏳';
+            btnCapture.disabled = true;
+
+            video.pause();
+
+            document.getElementById('status').textContent = '🔎 Analizando...';
+
+            requestAnimationFrame(async () => {
+                try {
+                    const startTime = performance.now();
+                    
+                    const maxDimension = 1280;
+                    let drawWidth = canvas.width;
+                    let drawHeight = canvas.height;
+                    
+                    if (canvas.width > maxDimension || canvas.height > maxDimension) {
+                        const scale = maxDimension / Math.max(canvas.width, canvas.height);
+                        drawWidth = canvas.width * scale;
+                        drawHeight = canvas.height * scale;
+                        canvas.width = drawWidth;
+                        canvas.height = drawHeight;
+                    }
+                    
+                    ctx.drawImage(video, 0, 0, drawWidth, drawHeight);
+                    
+                    capturedImage.src = canvas.toDataURL('image/jpeg', 0.85);
+                    capturedImage.style.display = 'block';
+                    
+                    const input = preprocesarImagen();
+                    const feeds = {};
+                    feeds[session.inputNames[0]] = input;
+                    const results = await session.run(feeds);
+                    
+                    const output = results[session.outputNames[0]];
+                    const detecciones = postprocesarResultados(output.data, canvas.width, canvas.height);
+                    const deteccionesFiltradas = nonMaxSuppression(detecciones, IOU_THRESHOLD);
+                    
+                    const endTime = performance.now();
+                    console.log(`⏱️ Tiempo: ${(endTime - startTime).toFixed(0)}ms | Detecciones: ${deteccionesFiltradas.length}`);
+                    
+                    deteccionesActuales = {};
+                    for (const det of deteccionesFiltradas) {
+                        deteccionesActuales[det.class] = (deteccionesActuales[det.class] || 0) + 1;
+                    }
+                    
+                    actualizarOverlayDeteccion();
+                    dibujarDetecciones(deteccionesFiltradas);
+                    
+                    document.getElementById('status').textContent = 
+                        deteccionesFiltradas.length > 0 ? 
+                        `✅ ${deteccionesFiltradas.length} billetes detectados` : 
+                        '⚠️ No se detectaron billetes';
+                    
+                } catch (error) {
+                    console.error('Error detección:', error);
+                    document.getElementById('status').textContent = '❌ Error al procesar';
+                }
+
+                btnCapture.classList.remove('processing');
+                btnCapture.textContent = '📸';
+                btnCapture.disabled = false;
+                procesando = false;
+            });
+        }
+
+        function actualizarOverlayDeteccion() {
+            const totalActual = Object.entries(deteccionesActuales)
+                .reduce((sum, [billete, cantidad]) => sum + (VALORES[billete] * cantidad), 0);
+            
+            document.getElementById('detectionAmount').textContent = `${totalActual.toLocaleString()}`;
+            
+            const itemsDiv = document.getElementById('detectionItems');
+            const btnGuardar = document.getElementById('btnGuardarOverlay');
+            const btnLimpiar = document.getElementById('btnLimpiarOverlay');
+            
+            if (Object.keys(deteccionesActuales).length === 0) {
+                itemsDiv.innerHTML = '<div class="detection-empty">Sin detecciones</div>';
+                btnGuardar.disabled = true;
+                btnLimpiar.disabled = true;
+            } else {
+                let html = '';
+                for (let [billete, cantidad] of Object.entries(deteccionesActuales)) {
+                    html += `<div class="detection-badge">${cantidad}x ${billete}</div>`;
+                }
+                itemsDiv.innerHTML = html;
+                btnGuardar.disabled = false;
+                btnLimpiar.disabled = false;
+            }
+        }
+
+        function preprocesarImagen() {
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = INPUT_SIZE;
+            tempCanvas.height = INPUT_SIZE;
+            const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
+            
+            tempCtx.imageSmoothingEnabled = true;
+            tempCtx.imageSmoothingQuality = 'medium';
+            tempCtx.drawImage(video, 0, 0, INPUT_SIZE, INPUT_SIZE);
+            
+            const imageData = tempCtx.getImageData(0, 0, INPUT_SIZE, INPUT_SIZE);
+            const { data } = imageData;
+            
+            const input = new Float32Array(3 * INPUT_SIZE * INPUT_SIZE);
+            const pixelCount = INPUT_SIZE * INPUT_SIZE;
+            
+            for (let i = 0; i < pixelCount; i++) {
+                const idx = i * 4;
+                input[i] = data[idx] / 255.0;
+                input[pixelCount + i] = data[idx + 1] / 255.0;
+                input[pixelCount * 2 + i] = data[idx + 2] / 255.0;
+            }
+            
+            return new ort.Tensor('float32', input, [1, 3, INPUT_SIZE, INPUT_SIZE]);
+        }
+
+        function postprocesarResultados(outputData, imgWidth, imgHeight) {
+            const detecciones = [];
+            const numClases = CLASS_NAMES.length;
+            const numPredictions = Math.floor(outputData.length / (4 + numClases));
+            const scaleX = imgWidth / INPUT_SIZE;
+            const scaleY = imgHeight / INPUT_SIZE;
+            
+            for (let i = 0; i < numPredictions; i++) {
+                const xCenter = outputData[i];
+                const yCenter = outputData[numPredictions + i];
+                const width = outputData[numPredictions * 2 + i];
+                const height = outputData[numPredictions * 3 + i];
+                
+                let maxScore = 0;
+                let maxClassId = 0;
+                
+                for (let c = 0; c < numClases; c++) {
+                    const score = outputData[numPredictions * (4 + c) + i];
+                    if (score > maxScore) {
+                        maxScore = score;
+                        maxClassId = c;
+                    }
+                }
+                
+                if (maxScore > CONF_THRESHOLD) {
+                    const x1 = Math.max(0, (xCenter - width / 2) * scaleX);
+                    const y1 = Math.max(0, (yCenter - height / 2) * scaleY);
+                    const x2 = Math.min(imgWidth, (xCenter + width / 2) * scaleX);
+                    const y2 = Math.min(imgHeight, (yCenter + height / 2) * scaleY);
+                    
+                    detecciones.push({
+                        class: CLASS_NAMES[maxClassId],
+                        conf: maxScore,
+                        bbox: [x1, y1, x2, y2]
+                    });
+                }
+            }
+            
+            return detecciones;
+        }
+
+        function nonMaxSuppression(detecciones, iouThreshold) {
+            detecciones.sort((a, b) => b.conf - a.conf);
+            const resultado = [];
+            const suppressed = new Array(detecciones.length).fill(false);
+            
+            for (let i = 0; i < detecciones.length; i++) {
+                if (suppressed[i]) continue;
+                resultado.push(detecciones[i]);
+                
+                for (let j = i + 1; j < detecciones.length; j++) {
+                    if (suppressed[j]) continue;
+                    
+                    if (detecciones[i].class === detecciones[j].class) {
+                        const iou = calcularIoU(detecciones[i].bbox, detecciones[j].bbox);
+                        if (iou > iouThreshold) {
+                            suppressed[j] = true;
+                        }
+                    }
+                }
+            }
+            
+            return resultado;
+        }
+
+        function calcularIoU(bbox1, bbox2) {
+            const [x1_1, y1_1, x2_1, y2_1] = bbox1;
+            const [x1_2, y1_2, x2_2, y2_2] = bbox2;
+            
+            const xi1 = Math.max(x1_1, x1_2);
+            const yi1 = Math.max(y1_1, y1_2);
+            const xi2 = Math.min(x2_1, x2_2);
+            const yi2 = Math.min(y2_1, y2_2);
+            
+            const interArea = Math.max(0, xi2 - xi1) * Math.max(0, yi2 - yi1);
+            const bbox1Area = (x2_1 - x1_1) * (y2_1 - y1_1);
+            const bbox2Area = (x2_2 - x1_2) * (y2_2 - y1_2);
+            const unionArea = bbox1Area + bbox2Area - interArea;
+            
+            return unionArea > 0 ? interArea / unionArea : 0;
+        }
+
+        function dibujarDetecciones(detecciones) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.strokeStyle = '#00ff88';
+            ctx.lineWidth = 3;
+            ctx.font = 'bold 16px Arial';
+            
+            for (const det of detecciones) {
+                const [x1, y1, x2, y2] = det.bbox;
+                ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+                
+                const label = `${det.class} (${(det.conf * 100).toFixed(0)}%)`;
+                const textWidth = ctx.measureText(label).width;
+                
+                ctx.fillStyle = '#00ff88';
+                ctx.fillRect(x1, y1 - 25, textWidth + 10, 25);
+                ctx.fillStyle = '#000';
+                ctx.fillText(label, x1 + 5, y1 - 5);
+            }
+        }
+
+        function guardarDeteccionActual() {
+            if (Object.keys(deteccionesActuales).length === 0) {
+                alert('⚠️ No hay detecciones para guardar');
+                return;
+            }
+
+            const totalActual = Object.entries(deteccionesActuales)
+                .reduce((sum, [billete, cantidad]) => sum + (VALORES[billete] * cantidad), 0);
+
+            const registro = {
+                id: Date.now(),
+                timestamp: new Date().toLocaleString(),
+                total: totalActual,
+                desglose: {...deteccionesActuales}
+            };
+
+            historial.unshift(registro);
+            localStorage.setItem('historial_billetes', JSON.stringify(historial));
+            
+            actualizarHistorialUI();
+
+            const overlay = document.querySelector('.detection-overlay');
+            overlay.style.borderTop = '3px solid #00ff88';
+            
+            document.getElementById('status').textContent = '✅ Guardado en historial';
+
+            setTimeout(() => {
+                overlay.style.borderTop = 'none';
+                deteccionesActuales = {};
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                capturedImage.style.display = 'none';
+                actualizarOverlayDeteccion();
+                
+                if (camaraActiva && video.paused) {
+                    video.play();
+                }
+                
+                if (esMobil) {
+                    document.getElementById('status').textContent = '✅ Listo para siguiente captura';
+                } else {
+                    document.getElementById('status').textContent = '✅ Guardado - Detectando...';
+                }
+            }, 500);
+        }
+
+        function limpiarDeteccionActual() {
+            deteccionesActuales = {};
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            capturedImage.style.display = 'none';
+            actualizarOverlayDeteccion();
+            
+            const overlay = document.querySelector('.detection-overlay');
+            overlay.style.borderTop = '3px solid #ffaa00';
+            setTimeout(() => {
+                overlay.style.borderTop = 'none';
+            }, 500);
+
+            if (camaraActiva && video.paused) {
+                video.play();
+            }
+
+            if (esMobil) {
+                document.getElementById('status').textContent = '🗑️ Limpiado - Lista para nueva captura';
+            } else {
+                document.getElementById('status').textContent = '🗑️ Detección limpiada';
+            }
+        }
+
+        function eliminarDelHistorial(id) {
+            if (!confirm('¿Eliminar este registro?')) return;
+            
+            historial = historial.filter(item => item.id !== id);
+            localStorage.setItem('historial_billetes', JSON.stringify(historial));
+            actualizarHistorialUI();
+        }
+
+        function actualizarHistorialUI() {
+            const totalHistorial = calcularTotalHistorial();
+            document.getElementById('totalHistorial').textContent = `${totalHistorial.toLocaleString()}`;
+
+            const list = document.getElementById('historialList');
+            
+            if (historial.length === 0) {
+                list.innerHTML = '<div class="empty-message">No hay registros guardados</div>';
+                return;
+            }
+
+            let html = '';
+            for (let reg of historial) {
+                const desglose = Object.entries(reg.desglose)
+                    .map(([b, c]) => `${c}x${b}`)
+                    .join(', ');
+                
+                html += `
+                    <div class="historial-item">
+                        <div class="historial-item-header">
+                            <div class="historial-item-valor">${reg.total.toLocaleString()}</div>
+                            <button class="btn-eliminar" onclick="eliminarDelHistorial(${reg.id})">
+                                🗑️
+                            </button>
+                        </div>
+                        <div class="historial-item-desglose">${desglose}</div>
+                        <div class="historial-item-fecha">${reg.timestamp}</div>
+                    </div>`;
+            }
+            list.innerHTML = html;
+        }
+
+        function limpiarHistorial() {
+            if (historial.length === 0) {
+                alert('⚠️ El historial ya está vacío');
+                return;
+            }
+
+            if (confirm('¿Limpiar TODO el historial? Esta acción no se puede deshacer.')) {
+                historial = [];
+                localStorage.removeItem('historial_billetes');
+                actualizarHistorialUI();
+            }
+        }
+
+        function probarConImagen() {
+            if (!session) {
+                alert('⚠️ Modelo no cargado');
+                return;
+            }
+            document.getElementById('imageInput').click();
+        }
+
+        async function procesarImagen(input) {
+            if (!input.files || !input.files[0]) return;
+            
+            const file = input.files[0];
+            console.log('📸 Procesando imagen:', file.name);
+            
+            const img = new Image();
+            img.onload = async function() {
+                if (stream) detenerCamara();
+                
+                canvas.width = img.width;
+                canvas.height = img.height;
+                
+                capturedImage.src = img.src;
+                capturedImage.style.display = 'block';
+                
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                
+                try {
+                    document.getElementById('status').textContent = '🔎 Analizando imagen...';
+                    
+                    const inputTensor = preprocesarImagenStatic(img);
+                    const feeds = {};
+                    feeds[session.inputNames[0]] = inputTensor;
+                    
+                    const results = await session.run(feeds);
+                    const output = results[session.outputNames[0]];
+                    
+                    const detecciones = postprocesarResultados(output.data, canvas.width, canvas.height);
+                    const deteccionesFiltradas = nonMaxSuppression(detecciones, IOU_THRESHOLD);
+                    
+                    deteccionesActuales = {};
+                    for (const det of deteccionesFiltradas) {
+                        deteccionesActuales[det.class] = (deteccionesActuales[det.class] || 0) + 1;
+                    }
+                    
+                    actualizarOverlayDeteccion();
+                    dibujarDetecciones(deteccionesFiltradas);
+                    
+                    document.getElementById('status').textContent = 
+                        deteccionesFiltradas.length > 0 ? 
+                        `✅ ${deteccionesFiltradas.length} billetes detectados` : 
+                        '⚠️ No se detectaron billetes';
+                    
+                } catch (error) {
+                    console.error('❌ Error procesando imagen:', error);
+                    document.getElementById('status').textContent = '❌ Error al procesar';
+                }
+            };
+            
+            img.src = URL.createObjectURL(file);
+        }
+
+        function preprocesarImagenStatic(img) {
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = INPUT_SIZE;
+            tempCanvas.height = INPUT_SIZE;
+            const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
+            
+            tempCtx.imageSmoothingEnabled = true;
+            tempCtx.imageSmoothingQuality = 'medium';
+            tempCtx.drawImage(img, 0, 0, INPUT_SIZE, INPUT_SIZE);
+            
+            const imageData = tempCtx.getImageData(0, 0, INPUT_SIZE, INPUT_SIZE);
+            const { data } = imageData;
+            
+            const input = new Float32Array(3 * INPUT_SIZE * INPUT_SIZE);
+            const pixelCount = INPUT_SIZE * INPUT_SIZE;
+            
+            for (let i = 0; i < pixelCount; i++) {
+                const idx = i * 4;
+                input[i] = data[idx] / 255.0;
+                input[pixelCount + i] = data[idx + 1] / 255.0;
+                input[pixelCount * 2 + i] = data[idx + 2] / 255.0;
+            }
+            
+            return new ort.Tensor('float32', input, [1, 3, INPUT_SIZE, INPUT_SIZE]);
+        }
+
+        window.onbeforeunload = function() {
+            if (stream) stream.getTracks().forEach(t => t.stop());
+        };
+    </script>
+</body>
+</html>
